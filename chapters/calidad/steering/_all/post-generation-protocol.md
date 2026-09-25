@@ -1,6 +1,6 @@
 ---
 id: calidad-post-generation-protocol
-version: 1.1.0
+version: 1.3.0
 scope: chapter
 type: steering
 chapter: calidad
@@ -38,6 +38,11 @@ Aplica a los 5 IDEs soportados (Kiro, Claude Code, GitHub Copilot, Amazon Q IDE,
 
 7. **Reportar estado formal**: `success | partial | failed` con causa y blockers.
 
+
+**Lo que exige juicio no lo verifica quien lo hizo**: en los puntos de pausa —cierre de insumos, antes de la primera corrida, al aplicar una ficha, antes de archivar un verde y antes de declarar un defecto— revisa un verificador con contexto limpio (`[[calidad-fresh-context-verification]]`), que recibe el artefacto y la pregunta, nunca la conversación. Su veredicto queda en `.evidence/verification/`.
+
+**Confirmación de ejecución antes del smoke gate**: aplicar `[[calidad-post-generation-execution-prompt]]` y dejar el modo de operación y el presupuesto de sesión declarados en `.evidence/session-config.json`. Sin esa confirmación no se lanza la primera corrida.
+
 ## Restricciones
 
 - NUNCA declarar `success` sin ejecución real en modo `full`.
@@ -46,4 +51,4 @@ Aplica a los 5 IDEs soportados (Kiro, Claude Code, GitHub Copilot, Amazon Q IDE,
 
 ## Cross-links
 
-`[[calidad-test-execution-orchestration]]`, `[[calidad-failure-triage-and-classification]]`, `[[calidad-test-self-correction-loop]]`, `[[calidad-test-self-healing]]`, `[[calidad-test-evidence-and-traceability]]`, `[[calidad-delivery-gate-contract]]`.
+`[[calidad-test-execution-orchestration]]`, `[[calidad-failure-triage-and-classification]]`, `[[calidad-test-self-correction-loop]]`, `[[calidad-test-self-healing]]`, `[[calidad-test-evidence-and-traceability]]`, `[[calidad-results-structure-universal]]` — la convención de carpetas donde aterriza `.evidence/`, `[[calidad-delivery-gate-contract]]`.

@@ -1,6 +1,23 @@
 .DS_STORE
+.DS_Store
 
 # Scripts añadidos (no versionados)
 scripts/validate-assets-guide.md
 scripts/validate-assets.mjs
 scripts/validate-stack-skills.mjs
+
+# Conocimiento de cuenta: su sistema de registro es Mimir, no este repo
+accounts/
+
+# Salida de build de bundles y material de trabajo: no es dominio versionable
+salida/
+entrada/
+
+# Tooling de migracion: los scripts y el README se versionan.
+# El estado operativo y los reportes no: cambian en cada corrida y son regenerables.
+migration/sync-state*.json
+migration/id-map.json
+migration/report*.json
+
+__pycache__/
+*.pyc

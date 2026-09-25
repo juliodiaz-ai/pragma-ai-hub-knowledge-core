@@ -12,6 +12,7 @@ Checks:
   5. References       - un bundle no cita references propias inexistentes
   6. Cadena del router- los eslabones de la certificacion de una historia existen
   7. Huerfanos        - todo workflow es invocado por algun asset
+  8. Alcanzabilidad   - todo asset se alcanza navegando [[id]] desde el steering
 
 Uso:
     python3 scripts/audit-chapter.py            # exit 1 si hay hallazgos
@@ -46,6 +47,10 @@ REQUERIDOS = {
 CADENA = [
     ("traza del pipeline",        "calidad-pipeline-state-tracking"),
     ("inputs obligatorios",       "calidad-mandatory-inputs-protocol"),
+    ("recorrido funcional",       "calidad-functional-flow-input"),
+    ("fuentes de interfaz",       "calidad-ui-source-contract"),
+    ("lo determinista a tooling", "calidad-deterministic-work-to-tooling"),
+    ("continuidad pre-desarrollo","calidad-pre-development-artifacts-continuity"),
     ("SUT readiness gate",        "calidad-sut-readiness-gate"),
     ("mapa de locators",          "calidad-ui-locator-map-contract"),
     ("deteccion de intent",       "calidad-intent-detection"),
@@ -61,6 +66,9 @@ CADENA = [
     ("evidencia y trazabilidad",  "calidad-test-evidence-and-traceability"),
     ("gate de smoke",             "calidad-smoke-gate-policy"),
     ("ejecucion",                 "calidad-test-execution-orchestration"),
+    ("auditoria en frio",         "calidad-cold-audit-before-execution"),
+    ("correccion con persona",    "calidad-human-fix-request-protocol"),
+    ("verificacion fresca",       "calidad-fresh-context-verification"),
     ("triage de fallos",          "calidad-failure-triage-and-classification"),
     ("auto-correccion",           "calidad-test-self-correction-loop-workflow"),
     ("reporte ejecutivo",         "calidad-generate-executive-report"),
@@ -92,7 +100,8 @@ def main() -> int:
     archivos = sorted(SRC.rglob("*.md"))
     ids: dict[str, Path] = {}
     hallazgos: dict[str, list[str]] = {k: [] for k in
-        ["frontmatter", "coherencia", "links", "portabilidad", "references", "cadena", "huerfanos"]}
+        ["frontmatter", "coherencia", "links", "portabilidad", "references", "cadena", "huerfanos",
+         "alcanzables", "artefactos"]}
 
     # --- inventario de ids ---
     # Los assets de cuenta viven fuera de chapters/ pero se referencian con la
@@ -110,6 +119,54 @@ def main() -> int:
             if fm["id"] in ids:
                 hallazgos["frontmatter"].append(f"id duplicado '{fm['id']}': {f} y {ids[fm['id']]}")
             ids[fm["id"]] = f
+
+    # --- 0: el manifiesto de la puerta cubre lo que los assets obligatorios exigen ---
+    # Un artefacto prescrito por un asset mandatory que no este en el manifiesto no
+    # lo comprueba nadie: es exactamente el fallo que costo la certificacion NT-24880.
+    MANIFIESTO = SRC / "skills/_all/delivery-gate-contract/scripts/check-required-artifacts.py"
+    EXENTOS = {  # nombre variable, ejemplo dentro del asset, o cubierto por otra entrada
+        ".evidence/audit-log-", ".evidence/execution-log-", ".evidence/execution-status-",
+        ".evidence/report-", ".evidence/session-log-archive-", ".evidence/.",
+        ".evidence/session-config.json", ".evidence/execution-status.json",
+        ".evidence/preflight/initial-screen.png", ".evidence/prototype-acceptance.json",
+        ".evidence/locators-discovered.json", ".evidence/audit-log-20260604.md",
+        ".evidence/execution-log-20260604.json",
+        # Solo existe cuando alguna historia del lote trae fuente de arquitectura. Que la
+        # haya, o por que no la hay, ya lo declara story-sources.json, que si esta en la
+        # lista: exigir la carpeta haria fallar en falso a un lote sin arquitectura escrita.
+        ".evidence/arquitectura",
+    }
+    if MANIFIESTO.is_file():
+        declarados = set(re.findall(r'"path":\s*"([^"]+)"', MANIFIESTO.read_text(encoding="utf-8")))
+        EV = re.compile(r"\.evidence/([A-Za-z0-9_./-]+)")
+        for f in archivos:
+            if not es_asset(f):
+                continue
+            txt = f.read_text(encoding="utf-8")
+            fm = parse_fm(txt)
+            if fm.get("enforcement") != "mandatory":
+                continue
+            for a in sorted({".evidence/" + x.rstrip("/") for x in EV.findall(txt)}):
+                if "{" in a or "<" in a or a in EXENTOS or a in declarados:
+                    continue
+                hallazgos["artefactos"].append(
+                    f"{fm.get('id')}: exige {a} y no esta en la lista de la puerta — nadie lo comprueba")
+        # ningun obligatorio se queda sin capa: o produce artefacto, o declara por que no
+        gate_txt = MANIFIESTO.read_text(encoding="utf-8")
+        con_art = set(re.findall(r'"by":\s*"([^"]+)"', gate_txt))
+        sin_art = set(re.findall(r'^\s*"(calidad-[a-z0-9-]+)":\s*"', gate_txt, re.M))
+        for f in archivos:
+            if not es_asset(f):
+                continue
+            fm = parse_fm(f.read_text(encoding="utf-8"))
+            if fm.get("enforcement") != "mandatory" or fm.get("type") == "steering":
+                continue
+            aid = fm.get("id")
+            if aid and aid not in con_art and aid not in sin_art:
+                hallazgos["artefactos"].append(
+                    f"{aid}: obligatorio sin capa de exigibilidad — ni produce artefacto ni declara por que no")
+    else:
+        hallazgos["artefactos"].append("falta el script de la puerta de artefactos obligatorios")
 
     # --- 1 y 2: frontmatter y coherencia carpeta/stack ---
     for f in archivos:
@@ -178,6 +235,37 @@ def main() -> int:
     for w in sorted(workflows - referenciados):
         hallazgos["huerfanos"].append(f"workflow '{w}' no lo invoca ningun asset")
 
+    # --- 8: alcanzable navegando desde el steering ---
+    # Un asset puede resolver sus links y aun asi no encontrarlo nadie. El agente
+    # arranca en el steering y navega por [[id]]; lo que no cuelga de ahi existe y
+    # no se usa. Los resolvedores se excluyen como FUENTE: son tabla de traduccion
+    # (listan todo), no un camino de descubrimiento.
+    RESOLVERS = {i for i in ids if i.endswith("-asset-resolver")}
+    salientes: dict[str, set[str]] = {}
+    raices: set[str] = set()
+    for aid, f in ids.items():
+        texto = f.read_text(encoding="utf-8")
+        fm = parse_fm(texto)
+        if fm.get("type") == "steering":
+            raices.add(aid)
+        salientes[aid] = set() if aid in RESOLVERS else {
+            r for r in WIKI.findall(texto) if r != aid and r in ids}
+    alcanzados = set(raices)
+    pila = list(raices)
+    while pila:
+        for hijo in salientes.get(pila.pop(), ()):
+            if hijo not in alcanzados:
+                alcanzados.add(hijo)
+                pila.append(hijo)
+    entrantes: dict[str, int] = {i: 0 for i in ids}
+    for aid, hijos in salientes.items():
+        for h in hijos:
+            entrantes[h] += 1
+    for aid in sorted(set(ids) - alcanzados - RESOLVERS):
+        motivo = "nadie lo enlaza" if not entrantes[aid] else "solo cuelga de otro inalcanzable"
+        hallazgos["alcanzables"].append(
+            f"'{aid}' no se alcanza navegando desde el steering ({motivo}): {ids[aid]}")
+
     # --- reporte ---
     total = sum(len(v) for v in hallazgos.values())
     print(f"=== Regresion del chapter Calidad — {len(ids)} assets ===\n")
@@ -189,6 +277,8 @@ def main() -> int:
         "references":   "References propias existen",
         "cadena":       "Cadena de certificacion completa",
         "huerfanos":    "Sin workflows huerfanos",
+        "alcanzables":  "Todo asset se alcanza desde el steering",
+        "artefactos":   "Artefactos obligatorios cubiertos por la puerta",
     }
     for clave, etiqueta in ETIQUETAS.items():
         items = hallazgos[clave]

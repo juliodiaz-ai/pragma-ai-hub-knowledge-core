@@ -1,6 +1,6 @@
 ---
 id: calidad-mandatory-inputs-protocol
-version: 1.4.0
+version: 2.2.0
 scope: chapter
 type: skill
 chapter: calidad
@@ -20,6 +20,12 @@ verification:
     failure_message: "Bloqueado: no se resolvió si el desarrollo/datos/mapeo de locators están disponibles. Aplicar el SUT readiness gate."
   - check: "checkpoint de datos de prueba emitido y confirmado por el usuario antes del STRATEGY.md, derivado de los escenarios planificados (entidad + estado exigido), con validación cruzada contra el catálogo y con lo faltante comunicado al QA con dueño y fecha"
     failure_message: "Bloqueado: no se confirmaron los datos de prueba concretos. Generar con datos sin confirmar produce una suite que falla por dato y no por defecto."
+  - check: "la matriz de cobertura de todas las plataformas del alcance quedó escrita en .evidence/coverage-declared.json y aprobada antes de generar código"
+    failure_message: "Bloqueado: se empezó a generar sin congelar la cobertura. Diseñar escenarios sobre la marcha deja criterios sin cubrir y los diseña con los insumos lejos."
+  - check: "se emitió .evidence/input-sufficiency.json evaluando suficiencia y no solo presencia, con el hueco concreto por entrada incompleta"
+    failure_message: "Bloqueado: se dio un insumo por cubierto porque llegó. La historia llega casi siempre y casi nunca basta; sin dictamen por entrada, el agente descubre lo que falta ejecutando."
+  - check: "cada criterio de aceptación es verificable: condición observable, plataformas donde aplica, estado de entrada exigido y resultado observable con su copy exacto"
+    failure_message: "Bloqueado: hay criterios que no se pueden convertir en aserción sin consultar a una persona. Eso no es un criterio, es una intención, y se resuelve antes de generar."
 ---
 
 # Mandatory Inputs Protocol — Contrato de Entrada Antes de Generar
@@ -45,6 +51,54 @@ Aplica este skill **al inicio** de cualquier solicitud (paso 1 de `[[calidad-rou
 | `locator_map`  | Condicional (front/mobile; **obligatorio** si `execution_target != real`) | Mapeo acordado QA+dev de identificadores UI (`data-testid` / accessibility ids)  | Fuente única de selectores pre-desarrollo; formato y contrato en `[[calidad-ui-locator-map-contract]]`        |
 | `test_credentials` | Obligatorio cuando el flujo requiere autenticación | Usuario de prueba vigente y su contraseña                                    | Se cargan por el mecanismo del proyecto; **jamás literales en el código** ni escritas en evidencia            |
 | `test_data_entities` | Obligatorio cuando el escenario opera sobre entidades concretas | Los identificadores reales bajo prueba (cuenta, tarjeta, producto, contrato)  | Se validan contra el catálogo de datos del proyecto antes de generar                                          |
+
+## Presencia no es suficiencia
+
+La tabla de arriba dice **qué debe llegar**. No dice **qué debe contener**, y ahí está el hueco que más caro sale: en campo llegó la historia, se dio el insumo por cubierto, y el agente terminó descubriendo el recorrido ejecutando.
+
+> **La historia de usuario es obligatoria siempre, y casi nunca es suficiente por sí sola.**
+
+Por eso el gate no evalúa presencia sino **suficiencia, entrada por entrada**, y cuando algo falta **nombra la pieza, no el documento**. "El criterio 7 no es verificable: dice que el sistema responde correctamente y no dice qué ve la persona" es accionable en un mensaje. "Falta la historia" devuelve la pelota sin información.
+
+### Qué se espera de los criterios de aceptación
+
+Obligatorios para los tres frentes —web, móvil y backend—, y con contrato de verificabilidad. Cada criterio declara:
+
+| Campo | Por qué |
+|---|---|
+| **Condición observable**, no una cualidad | "Responde correctamente" no se convierte en aserción sin preguntarle a alguien |
+| **En qué plataformas aplica** | O "todas", pero dicho. Es lo que decide si hay uno o tres escenarios |
+| **El estado de entrada que exige** | El dato en qué condición; alimenta el checkpoint de datos de abajo |
+| **El resultado observable, con el copy exacto** si es texto | Sin copy exacto, la aserción se escribe de memoria y falla por formato |
+| **Qué queda fuera de alcance** | Un criterio sin frontera se interpreta ancho y se paga en escenarios que nadie pidió |
+
+Un criterio que no se puede convertir en aserción sin consultar a una persona no es un criterio: es una intención, y el gate lo reporta **por su número**.
+
+### Dos insumos propios del front
+
+Cuando la entrega es web o móvil, dos entradas más, cada una con su asset y su contrato:
+
+- **El recorrido funcional detallado** — `[[calidad-functional-flow-input]]`. Secuencia de pantallas, bifurcaciones **con la condición que las dispara**, pantallas intermitentes, desenlaces con su copy y su duración, y precondiciones. Puede vivir en la historia o aparte; lo que no puede es no existir.
+- **Las fuentes de interfaz** — `[[calidad-ui-source-contract]]`. `ui_source` no es una fuente sino una familia, y cada miembro responde una pregunta distinta: el diseño estático da el flujo y los copys pero no el árbol; el design system da el árbol pero no el flujo. Se declara **cuál cubre el eje de flujo y cuál el de estructura**.
+
+### Lo que valida la máquina no lo razona el agente
+
+Buena parte de este contrato es **forma, no criterio**: que el nombre de proyecto cumpla su patrón, que la ruta de salida sea absoluta, que el spec llegue como contenido y no como ruta, que cada entrada del dictamen traiga sus campos. Eso lo comprueba la puerta —que valida estructura además de existencia— y **no debe gastarse en razonamiento**, igual que le exigimos al agente con las corridas.
+
+Lo que sí exige juicio y no puede validarse por esquema es una lista corta: si un criterio de aceptación se puede convertir en aserción, si una fuente responde el eje que se le pide, y si lo que falta bloquea o se acepta con precio. Eso va al verificador con contexto limpio (`[[calidad-fresh-context-verification]]`), no a la autoevaluación de quien acaba de escribirlo.
+
+### El dictamen de suficiencia
+
+El resultado de esta fase es un artefacto, no una impresión: `.evidence/input-sufficiency.json`, con una fila por entrada y cuatro campos.
+
+| Campo | Contenido |
+|---|---|
+| **Qué se espera** | El contrato de esa entrada |
+| **Qué llegó** | Presente, parcial o ausente — y de qué fuente |
+| **Qué falta exactamente** | La pieza, no el documento |
+| **Qué pasa si no llega** | Detener · degradar con precio · pedir, y **de dónde puede venir** |
+
+Ese último campo es el que vuelve accionable el dictamen: no dice "falta el mapa de identificadores", dice "falta, y puede salir del repositorio de front, del design system o de un acuerdo con desarrollo". Y el precio de degradar no es retórico: sale del histórico de la cuenta. Ver `[[calidad-sut-readiness-gate]]`, que es quien emite el dictamen y quien registra el riesgo aceptado.
 
 ## Checkpoint de datos de prueba (antes del STRATEGY.md)
 
@@ -107,6 +161,20 @@ Reglas duras:
 
 Los intents funcionales (análisis/refinamiento de HUs, diseño de casos, estrategia/plan) NO usan la tabla de arriba: su contrato de entrada lo define cada workflow funcional (`[[calidad-analyze-and-refine-stories]]`, `[[calidad-design-test-cases]]`, `[[calidad-build-test-strategy-and-plan]]`). Común a los tres: `stories_source`/`contexto_fuente` (IDs o queries del ALM vía `[[calidad-alm-mcp-integration]]`, o el contenido pegado) y `output_path`. `spec`, `sut_available` y `locator_map` no aplican salvo que el flujo derive en automatización (re-entrada al router).
 
+**Que no usen la tabla de arriba no significa que no tengan contrato.** Durante mucho tiempo eso se leyó como que la ruta funcional no tenía compuerta de entrada, y el resultado fue que toda la maquinaria de suficiencia de este documento se quedó del lado de la automatización — mientras la fase que decide qué se va a poder probar arrancaba sin declarar nada.
+
+El contrato de `[[calidad-analyze-stories-and-request-data]]` —la ruta que va de las historias a la solicitud de datos— añade cinco entradas propias. Las cinco son las que faltaron en la sesión medida, y cada una produjo su turno de reproceso:
+
+| Input | Qué es | Lo que cuesta que falte |
+|---|---|---|
+| `fuentes_de_arquitectura` | Dónde vive la arquitectura de estos componentes **en esta cuenta**, o la declaración de que no existe | El agente la busca en la herramienta que suele funcionar en otros clientes. Un turno |
+| `mapa_de_capas` | Qué repositorio prueba qué capa en esta cuenta | La estrategia reparte los criterios por dónde se ven, no por dónde viven. Un turno |
+| `ambiente_objetivo` | A qué ambiente se refieren los datos | Una solicitud sin ambiente es una que alguien puede ejecutar en producción |
+| `audiencia_de_la_solicitud` | Quién recibe el documento y qué conoce | Se escribe para quien conoce las historias, y lo recibe quien no. Reescritura completa |
+| `capacidades_de_qa` | Qué puede provisionar el equipo por su cuenta en este producto | Se le piden al cliente datos que el equipo se crea solo. Dos turnos |
+
+Las cinco son **conocimiento de la cuenta**, no del chapter: se consultan antes de empezar. Si la cuenta no las tiene documentadas, preguntarlas una vez y registrarlas ahí es lo que hace que dejen de costar. Y aplica la misma regla que al resto del contrato: se evalúa **suficiencia**, y lo que falte se nombra por la pieza — "no sé qué repositorio prueba la capa de servicios" es accionable; "falta contexto" no.
+
 Cruce con la `user_story` de esta tabla: si la HU entregada como input de automatización está visiblemente rota (sin CA, ambigua), ofrecer el análisis funcional (`[[calidad-funcional-story-analysis]]`) ANTES de generar código — mejora el insumo en vez de generar sobre él.
 
 ### K6-specific inputs
@@ -147,6 +215,26 @@ Cuando un cliente o proyecto necesite endurecer inputs:
 2. Apuntar el override en la tabla de arriba con: escenario, skill o asset que lo define, lista de inputs que se vuelven obligatorios.
 3. Si el override aplica también a la validación de spec o al flujo de generación, mencionarlo en el skill de framework, no acá: este documento sólo concentra el pointer.
 
+## La cobertura se congela antes de generar, y para todas las plataformas
+
+Diseñar los escenarios sobre la marcha —unos al principio, otros cuando toca la plataforma siguiente— tiene dos consecuencias, y las dos se pagan tarde.
+
+La primera es de **cobertura**: en una entrega larga, con el contexto ya degradado por cientos de intercambios, el agente da por terminada la historia porque ejecutó todo lo que había creado, sin recordar que quedaron criterios sin escenario. Verificado en campo, exactamente así.
+
+La segunda es de **calidad de diseño**: los escenarios que se diseñan al final se diseñan con los insumos lejos. La historia, el diseño y el contraste entre ambos están más frescos que nunca justo después de la fase de insumos; ese es el momento de decidir qué se prueba, no tres días después.
+
+**Entregable obligatorio antes de escribir una línea de código: la matriz de cobertura completa, para todas las plataformas del alcance, aprobada por la persona.**
+
+| Criterio | Plataformas | Escenario propuesto | Dato que exige | Reuso | Etiqueta |
+|---|---|---|---|---|---|
+
+Reglas de la matriz:
+
+- **Cubre todas las plataformas del alcance desde el inicio**, aunque se estabilicen en serie. Que la ejecución sea secuencial no obliga a que el diseño lo sea, y diseñar todo junto es lo que revela qué escenarios son el mismo caso en tres canales.
+- **Se vuelca al artefacto de pruebas como esqueletos** con etiqueta de pendiente. Un escenario que no existe como archivo no existe como compromiso.
+- **La cobertura se mide contra la matriz, no contra la memoria.** Al cierre de cada sesión y en la entrega, se compara lo declarado contra lo entregado y la diferencia se reporta. La comparación es determinista y la hace una herramienta del proyecto (`[[calidad-deterministic-work-to-tooling]]`); confiarla al recuerdo del agente es exactamente lo que produce historias cerradas con criterios sin cubrir.
+- **Todo cambio de alcance se refleja en la matriz** en el mismo turno en que se acuerda. Un criterio que sale del alcance sale de la matriz con su razón, no desaparece en silencio.
+
 ## Restricciones
 
 - **NUNCA proceder** sin los inputs obligatorios resueltos.
@@ -168,3 +256,6 @@ Asset de **cumplimiento obligatorio**. Antes de cerrar la fase que lo invoca, co
 | 4 | risk_map confirmado por usuario o default HIGH reportado explícitamente para revisión | Bloqueado: no se puede priorizar sin risk_map confirmado o default HIGH declarado al usuario. |
 | 5 | sut_available, data_available y (front/mobile) locator_map resueltos vía SUT readiness gate antes de validar spec | Bloqueado: no se resolvió si el desarrollo/datos/mapeo de locators están disponibles. Aplicar el SUT readiness gate. |
 | 6 | checkpoint de datos de prueba emitido y confirmado por el usuario antes del STRATEGY.md, derivado de los escenarios planificados (entidad + estado exigido), con validación cruzada contra el catálogo y con lo faltante comunicado al QA con dueño y fecha | Bloqueado: no se confirmaron los datos de prueba concretos. Generar con datos sin confirmar produce una suite que falla por dato y no por defecto. |
+| 7 | la matriz de cobertura de todas las plataformas del alcance quedó escrita en .evidence/coverage-declared.json y aprobada antes de generar código | Bloqueado: se empezó a generar sin congelar la cobertura. Diseñar escenarios sobre la marcha deja criterios sin cubrir y los diseña con los insumos lejos. |
+| 8 | se emitió .evidence/input-sufficiency.json evaluando suficiencia y no solo presencia, con el hueco concreto por entrada incompleta | Bloqueado: se dio un insumo por cubierto porque llegó. La historia llega casi siempre y casi nunca basta; sin dictamen por entrada, el agente descubre lo que falta ejecutando. |
+| 9 | cada criterio de aceptación es verificable: condición observable, plataformas donde aplica, estado de entrada exigido y resultado observable con su copy exacto | Bloqueado: hay criterios que no se pueden convertir en aserción sin consultar a una persona. Eso no es un criterio, es una intención, y se resuelve antes de generar. |

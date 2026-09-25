@@ -1,6 +1,6 @@
 ---
 id: calidad-intent-detection
-version: 1.1.0
+version: 1.2.0
 scope: chapter
 type: skill
 chapter: calidad
@@ -37,6 +37,7 @@ Esta skill decide **con qué framework** se generan las pruebas. La decisión de
 | Appium TypeScript (`appium-wdio`) | "mobile" + "TypeScript"/"WebdriverIO"/"WDIO"/"cucumber-js"/"Node", "iPad", "tablet", "web móvil", "app y navegador móvil" | "proyecto existente", "actualizar selectores", "agregar plataforma" | greenfield → `[[calidad-appium-wdio-greenfield]]` · brownfield → `[[calidad-appium-wdio-brownfield]]` |
 | serenity-wdio | "WebdriverIO", "Serenity/JS", "Cucumber TS", "web/mobile/api multiplataforma", "TypeScript E2E", "Screenplay Pattern", "serenity-wdio", "wdio", "serenity-js", "multiplataforma TS" | "proyecto existente", "agregar tests", "ya tenemos wdio", "extender arquetipo" | greenfield → `[[serenity-wdio-greenfield]]` · brownfield → `[[serenity-wdio-brownfield]]` |
 | Funcional  | "analizar historia", "HU", "INVEST", "criterios de aceptación", "refinamiento", "refinar", "casos de prueba" (diseño, no código), "test cases", "test plan", "plan de pruebas", "estrategia de pruebas", "matriz de trazabilidad", "Azure DevOps"/"Jira" como fuente de HUs | (no aplica greenfield/brownfield)                                 | análisis/refinamiento → `[[calidad-analyze-and-refine-stories]]` · diseño de casos → `[[calidad-design-test-cases]]` · estrategia/plan → `[[calidad-build-test-strategy-and-plan]]` |
+| Funcional (previo a automatizar) | "qué datos necesito", "qué datos y accesos solicitar", "solicitud de datos", "qué le pedimos al cliente/banco", "analiza estas HU para probarlas", "qué necesitamos para certificar este alcance" | (no aplica greenfield/brownfield) | `[[calidad-analyze-stories-and-request-data]]` |
 
 **Todo intent mobile requiere `appium-core`**, sea cual sea el stack de producto: ahí vive el conocimiento que no depende del lenguaje (resolución de locators, Flutter, catálogo de interacciones, auto-discovery de binario). No es un stack que el usuario elija: es el compañero obligatorio. Si no está instalado, decláralo como carencia antes de generar.
 
@@ -52,6 +53,35 @@ Esta skill decide **con qué framework** se generan las pruebas. La decisión de
 Señales que **no** desambiguan por sí solas: "Appium", "mobile", "Android", "iOS". Aparecen en los dos stacks.
 
 **Repos híbridos web y mobile**: un mismo repositorio puede necesitar dos stacks a la vez —por ejemplo, navegador con Playwright y app nativa con Appium TypeScript, orquestados por un único cucumber-js—. En ese caso se entregan **ambos** bundles y las convenciones comunes de la capa Cucumber vienen de `[[calidad-cucumber-bdd-conventions]]`. No se fuerza un stack único ni se ignora la mitad del repositorio.
+
+**El intent decide dónde se para, no dónde se empieza.** Comprueba si pide **producir
+pruebas ejecutables** —"automatiza", "genera los tests", "agrega escenarios", "extiende la
+suite"— o solo entender qué hace falta para poder probar —"analiza estas historias", "levanta
+dudas", "qué datos y accesos necesitamos", "arma la estrategia"—.
+
+- Si pide **generar**: se hace **todo**, análisis incluido. Evaluar la historia, levantar
+  dudas y vacíos, determinar qué dato exige cada criterio, exponer la solicitud y decidir qué
+  hay, qué se sintetiza y qué se gestiona — y después el código. `analisis` es fase
+  obligatoria de esa ruta (`[[calidad-pipeline-state-tracking]]`), no un paso previo que se
+  salta. Si ya se hizo antes, se hereda declarando de dónde.
+- Si pide **solo analizar**: se para ahí. **No se emite una línea de código**, no aplica el
+  gate de smoke ni se piden `spec` o el mapa de identificadores. Se entrega lo pedido y la
+  automatización se ofrece como paso siguiente, que decide el usuario.
+
+La asimetría completa, y qué hace una generación con los datos que faltan, en el paso de
+bifurcación de `[[calidad-route-test-generation]]`.
+
+**Desambiguación dentro de lo funcional**: las dos rutas funcionales parten de historias y
+terminan en cosas distintas. `[[calidad-analyze-and-refine-stories]]` **juzga la historia**
+—INVEST, calidad de criterios, Definition of Ready— y puede proponer reescribirla.
+`[[calidad-analyze-stories-and-request-data]]` **da la historia por buena** y produce lo que
+Calidad necesita para poder probarla: el dossier por historia y la solicitud de datos. La
+pregunta que decide: ¿el entregable es un veredicto sobre la historia, o los insumos para
+trabajar sobre ella? Si la historia está rota, la primera va antes que la segunda.
+
+Las tres son **momentos de un mismo recorrido**, y un intent puede pedir uno o todos. Lo que
+nunca se hace es ir más lejos de lo que se pidió: quien pide un refinamiento no recibe una
+suite, y quien pide análisis no recibe código.
 
 **Desambiguación "pruebas funcionales"**: si el intent pide *generar/automatizar* pruebas funcionales de una API (hay spec, endpoints, "automatiza") → Karate. Si pide *diseñar, documentar o gestionar* — analizar HUs, escribir casos de alto nivel, plan, estrategia — → stack funcional. Ante la duda, la pregunta es: "¿el entregable es código de pruebas ejecutable, o documentos/casos en el ALM?". El camino natural completo es funcional primero (diseño) y automatización después (los casos diseñados alimentan a los stacks).
 

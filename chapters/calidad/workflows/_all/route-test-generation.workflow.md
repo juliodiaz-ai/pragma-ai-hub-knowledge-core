@@ -1,6 +1,6 @@
 ---
 id: calidad-route-test-generation
-version: 1.0.0
+version: 1.2.0
 scope: chapter
 type: workflow
 chapter: calidad
@@ -78,6 +78,64 @@ Si el intent es **funcional**, el router bifurca aquí y delega directo — los 
 | Analizar / refinar HUs | `[[calidad-analyze-and-refine-stories]]` |
 | Diseñar casos de prueba de alto nivel (y publicarlos al ALM) | `[[calidad-design-test-cases]]` |
 | Estrategia y/o plan de pruebas | `[[calidad-build-test-strategy-and-plan]]` |
+| Analizar historias para poder probarlas y decir qué datos y accesos hacen falta | `[[calidad-analyze-stories-and-request-data]]` |
+
+#### El análisis es una fase de la generación, no una alternativa
+
+La relación entre las dos rutas es **asimétrica**, y confundir la dirección cuesta caro en
+los dos sentidos:
+
+| El usuario pide | Qué se hace | Dónde para |
+|---|---|---|
+| "automatiza esta funcionalidad", "genera los tests" | **Todo**: analizar, evaluar dudas y vacíos, determinar los datos que exige cada criterio, exponer la solicitud, decidir qué hay y qué no, y después generar | En el código ejecutable y su cierre |
+| "analiza estas historias", "levanta dudas", "qué datos y accesos hacen falta", "arma la estrategia" | **Solo la fase de análisis** | En el dossier y la solicitud. **No se genera una línea de código** |
+
+**Una generación no se salta el análisis.** Automatizar sin haber determinado qué dato exige
+cada criterio es exactamente lo que produce suites que fallan por dato y parecen defectos.
+La fase de análisis (`[[calidad-analyze-stories-and-request-data]]`) corre **dentro** de la
+generación, o se hereda si ya se hizo antes y su evidencia está en `.evidence/`. Lo que se
+hereda se declara; lo que falta, se hace.
+
+**Lo que sí está prohibido es al revés**: un intent que pide solo análisis, refinamiento,
+dudas, datos o estrategia **no continúa a generación**. No se emite código, no se aplica el
+gate de smoke, no se pide `spec` ni el mapa de identificadores. Se entrega lo pedido y se
+ofrece la generación como paso siguiente, que el usuario decide.
+
+#### Qué hace la generación con los datos que faltan
+
+El análisis expone la necesidad; el gate decide qué se hace con ella. La solicitud al cliente
+no bloquea la generación, pero **tampoco desaparece porque se haya sintetizado**:
+
+| Situación | Qué se hace | Dónde queda |
+|---|---|---|
+| El dato existe en el ambiente | Se usa | Checkpoint de datos confirmado |
+| Falta y solo lo habilita el cliente | Se **expone la solicitud** con condición, dueño y fecha, y se sigue por otra vía si la hay | `.evidence/data-request.json` (`[[calidad-client-test-data-request]]`) |
+| Falta y se ejecuta contra mock o híbrido | Se **sintetiza y se declara sintético**, con qué escenarios lo usan | `[[calidad-test-data-management]]`, delivery gate |
+| Falta y se ejecuta contra el sistema real | **Bloqueo con fecha**. No se sintetiza: sintetizar contra software ya desarrollado es anti-cheating | `[[calidad-sut-readiness-gate]]` |
+
+**Sintetizar no cierra la solicitud, la aplaza.** El dato sintético es temporal por
+definición: la corrida contra mock valida la mecánica, no el producto. Mientras tanto, el
+dato real **se sigue gestionando en paralelo** —con su dueño y su fecha— porque conseguirlo
+en el ambiente de un cliente tarda días y la prueba contra el sistema real lo va a exigir.
+Una entrega que sintetizó cierra con `certification: pending_real_integration` y con la
+lista de qué queda por validar; **un dato sintético que sobrevive en silencio a la llegada
+del sistema real produce una suite verde que nunca ejercitó el producto**.
+
+#### Marca en la traza
+
+`.evidence/pipeline-state.json` declara dos cosas que la puerta de artefactos lee, y las dos
+**se declaran, no se deducen**:
+
+- `"route": "analisis-y-datos"` — solo en las corridas de **solo análisis**. Es lo que le dice
+  a la puerta que esta entrega termina en el dossier y no en código.
+- `"client_data_required": true | false` — lo responde la fase de análisis en **cualquiera de
+  las dos rutas**, y es lo que activa los artefactos de la solicitud. Declararlo `false` es
+  una decisión que deja rastro; no declararlo cuando es cierto es falsear la traza
+  (`[[calidad-pipeline-state-tracking]]`).
+
+Deducir la condición del nombre de la fase ya falló: la primera fase de una generación se
+llama "diseño", y la puerta acabó exigiendo una solicitud dirigida al cliente en medio de una
+entrega de código.
 
 Reglas de la ruta:
 
